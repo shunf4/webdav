@@ -1,4 +1,6 @@
-# webdav
+# shunf4's personal fork of webdav
+
+Adds HTML directory listing when the user access the URL corresponding to a directory. This makes webdav's frontend interface.
 
 [![Build](https://img.shields.io/circleci/project/github/hacdias/webdav/master.svg?style=flat-square)](https://circleci.com/gh/hacdias/webdav)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hacdias/webdav?style=flat-square)](https://goreportcard.com/report/hacdias/webdav)
