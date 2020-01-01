@@ -49,8 +49,8 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{{ .Username }} - {{ .URLPath }} Listing - WebDAV Server</title>
-    <meta name="description" content="Listing of {{ .URLPath }} by logged-in user {{ .Username }}, WebDAV Server">
+    <title>{{or .Username "anonymous"}} - {{ .URLPath }} Listing - WebDAV Server</title>
+    <meta name="description" content="Listing of {{ .URLPath }} by logged-in user {{or .Username "anonymous"}}, WebDAV Server">
     <style>
         .td-size-listing {
             text-align: center;
@@ -73,7 +73,7 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
 <body>
 
     <div class="d-logged-in-user">
-        Currently logged in user: <span class="logged-in-user">{{ .Username }}</span>
+        Currently logged in user: <span class="logged-in-user">{{or .Username "anonymous"}}</span>&nbsp;<a href="{{ .URLPrefix }}?logout=1" class="a-logout">Logout (Leave empty when prompted to input credentials)</a>
     </div>
 
     <h1>
@@ -187,6 +187,14 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Logout
+	if r.URL.Query().Get("logout") == "1" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(401)
+		fmt.Fprintln(w, `Logged out. Please go <a href="./">back</a> to log in again.`)
+		return
+	}
+
 	// Authentication
 	if c.Auth {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
@@ -274,10 +282,12 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			err = tmpl.Execute(w, struct {
 				Username  string
+				URLPrefix string
 				URLPath   string
 				FileInfos []os.FileInfo
 			}{
 				Username:  u.Username,
+				URLPrefix: u.Handler.Prefix,
 				URLPath:   r.URL.Path,
 				FileInfos: fileInfos,
 			})
