@@ -2,8 +2,11 @@ package lib
 
 import (
 	"context"
+	"fmt"
+	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -24,6 +27,125 @@ type Config struct {
 	Cors  CorsCfg
 	Users map[string]*User
 }
+
+var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
+	"ByteCountIEC": func(b int64) string {
+		const unit = 1024
+		if b < unit {
+			return fmt.Sprintf("%d B", b)
+		}
+		div, exp := int64(unit), 0
+		for n := b / unit; n >= unit; n /= unit {
+			div *= unit
+			exp++
+		}
+		return fmt.Sprintf("%.1f %ciB",
+			float64(b)/float64(div), "KMGTPE"[exp])
+	},
+}).Parse(`
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{{ .Username }} - {{ .URLPath }} Listing - WebDAV Server</title>
+    <meta name="description" content="Listing of {{ .URLPath }} by logged-in user {{ .Username }}, WebDAV Server">
+    <style>
+        .td-size-listing {
+            text-align: center;
+        }
+
+        .td-date-listing {
+            text-align: center;
+        }
+
+        table {
+            width: -webkit-fill-available;
+        }
+
+        .d-logged-in-user {
+            float: right;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="d-logged-in-user">
+        Currently logged in user: <span class="logged-in-user">{{ .Username }}</span>
+    </div>
+
+    <h1>
+        WebDAV server - <a href="{{ .URLPath }}">{{ .URLPath }}</a>
+    </h1>
+
+    <p class="p-explain-dir">
+        The resource you are GETting is a directory. Index of this directory is listed below.
+    </p>
+
+    <table class="ta-listing">
+        <thead>
+            <tr class="header-listing">
+                <th>Name</th>
+                <th>Size</th>
+                <th>Last Modified Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="tr-listing">
+                <td class="td-name-listing">
+                    <a class="a-name-listing" href="../">../ (Go to parent directory of current directory)</a>
+                </td>
+                <td class="td-size-listing">
+                    N/A
+                </td>
+                <td class="td-date-listing">
+                    N/A
+                </td>
+            </tr>
+            <tr class="tr-listing">
+                <td class="td-name-listing">
+                    <a class="a-name-listing" href="./">./ (Current directory)</a>
+                </td>
+                <td class="td-size-listing">
+                    N/A
+                </td>
+                <td class="td-date-listing">
+                    N/A
+                </td>
+            </tr>
+
+            {{ range .FileInfos }}
+            <tr class="tr-listing">
+                <td class="td-name-listing">
+                    <a class="a-name-listing" href="./{{ .Name }}">{{ .Name }}{{ if .IsDir }}/{{ end }}</a>
+                </td>
+                <td class="td-size-listing">
+                    {{ ByteCountIEC .Size }}
+                </td>
+                <td class="td-date-listing">
+                    {{ .ModTime }}
+                </td>
+            </tr>
+            {{ else }}
+            <tr class="tr-listing">
+                <td class="td-name-listing" colspan="3">
+                    This is an empty directory.
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+
+
+
+</body>
+
+</html>
+`))
+
+//var tmpl = template.Must(template.New("list dir").Parse("xx"))
 
 // ServeHTTP determines if the request is for this plugin, and if all prerequisites are met.
 func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +250,42 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//
 	// Get, when applied to collection, will return the same as PROPFIND method.
 	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, u.Handler.Prefix) {
-		info, err := u.Handler.FileSystem.Stat(context.TODO(), strings.TrimPrefix(r.URL.Path, u.Handler.Prefix))
+		realPath := strings.TrimPrefix(r.URL.Path, u.Handler.Prefix)
+		info, err := u.Handler.FileSystem.Stat(context.TODO(), realPath)
 		if err == nil && info.IsDir() {
-			r.Method = "PROPFIND"
-
-			if r.Header.Get("Depth") == "" {
-				r.Header.Add("Depth", "1")
+			if !strings.HasSuffix(r.URL.Path, "/") {
+				http.Redirect(w, r, r.URL.Path+"/", 302)
+				return
 			}
+
+			f, err := u.Handler.FileSystem.OpenFile(context.TODO(), realPath, os.O_RDONLY, 0)
+			if err != nil {
+				http.Error(w, "Error opening directory", 500)
+				return
+			}
+			fileInfos, err := f.Readdir(0)
+			f.Close()
+
+			fileInfos[0].Size()
+			if err != nil {
+				http.Error(w, "Error reading directory", 500)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			err = tmpl.Execute(w, struct {
+				Username  string
+				URLPath   string
+				FileInfos []os.FileInfo
+			}{
+				Username:  u.Username,
+				URLPath:   r.URL.Path,
+				FileInfos: fileInfos,
+			})
+			if err != nil {
+				http.Error(w, "Error rendering template: "+err.Error(), 500)
+				return
+			}
+			return
 		}
 	}
 
