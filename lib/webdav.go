@@ -52,11 +52,7 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
     <title>{{or .Username "anonymous"}} - {{ .URLPath }} Listing - WebDAV Server</title>
     <meta name="description" content="Listing of {{ .URLPath }} by logged-in user {{or .Username "anonymous"}}, WebDAV Server">
     <style>
-        .td-size-listing {
-            text-align: center;
-        }
-
-        .td-date-listing {
+        .td-size-listing, .td-explain-empty-listing, .td-date-listing {
             text-align: center;
         }
 
@@ -130,7 +126,7 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
             </tr>
             {{ else }}
             <tr class="tr-listing">
-                <td class="td-name-listing" colspan="3">
+                <td class="td-name-listing td-explain-empty-listing" colspan="3">
                     This is an empty directory.
                 </td>
             </tr>
@@ -274,7 +270,6 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fileInfos, err := f.Readdir(0)
 			f.Close()
 
-			fileInfos[0].Size()
 			if err != nil {
 				http.Error(w, "Error reading directory", 500)
 				return
