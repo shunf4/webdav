@@ -252,7 +252,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//		"index.html" resource, a human-readable view of the contents of
 	//		the collection, or something else altogether.
 	//
-	// Get, when applied to collection, will return the same as PROPFIND method.
+	// Get, when applied to collection, will return the HTML human-readable view of dir structure.
 	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, u.Handler.Prefix) {
 		realPath := strings.TrimPrefix(r.URL.Path, u.Handler.Prefix)
 		info, err := u.Handler.FileSystem.Stat(context.TODO(), realPath)
