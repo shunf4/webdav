@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -252,7 +253,8 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//		"index.html" resource, a human-readable view of the contents of
 	//		the collection, or something else altogether.
 	//
-	// Get, when applied to collection, will return the HTML human-readable view of dir structure.
+	// Get, when applied to collection, will return the HTML human-readable
+	// view of dir structure.
 	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, u.Handler.Prefix) {
 		realPath := strings.TrimPrefix(r.URL.Path, u.Handler.Prefix)
 		info, err := u.Handler.FileSystem.Stat(context.TODO(), realPath)
@@ -270,6 +272,17 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fileInfos, err := f.Readdir(0)
 			f.Close()
 
+			detailedFileInfos := make([]os.FileInfo, len(fileInfos))
+
+			for i, fileInfo := range fileInfos {
+				detailedFileInfos[i], err = u.Handler.FileSystem.Stat(context.TODO(), path.Join(realPath, fileInfo.Name()))
+
+				if err != nil {
+					http.Error(w, "Error stating file", 500)
+					return
+				}
+			}
+
 			if err != nil {
 				http.Error(w, "Error reading directory", 500)
 				return
@@ -284,7 +297,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Username:  u.Username,
 				URLPrefix: u.Handler.Prefix,
 				URLPath:   r.URL.Path,
-				FileInfos: fileInfos,
+				FileInfos: detailedFileInfos,
 			})
 			if err != nil {
 				http.Error(w, "Error rendering template: "+err.Error(), 500)
