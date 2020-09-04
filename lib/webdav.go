@@ -198,6 +198,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if c.Auth {
 		if username, authinfo := c.Authenticator.CheckAuth(r); username == "" {
 			c.Authenticator.RequireAuth(w, r)
+			return
 		} else {
 			if authinfo != nil {
 				w.Header().Set(c.Authenticator.Headers.V().AuthInfo, *authinfo)
