@@ -12,7 +12,17 @@ import (
 	"github.com/spf13/pflag"
 	v "github.com/spf13/viper"
 	"golang.org/x/net/webdav"
+	abbot_auth "github.com/abbot/go-http-auth"
 )
+
+func getPassword(saved string) string {
+	if strings.HasPrefix(saved, "{bcrypt}") {
+		savedPassword := strings.TrimPrefix(saved, "{bcrypt}")
+		return savedPassword
+	}
+
+	return saved
+}
 
 func parseRules(raw []interface{}) []*lib.Rule {
 	rules := []*lib.Rule{}
@@ -182,6 +192,7 @@ func readConfig(flags *pflag.FlagSet) *lib.Config {
 			Credentials: false,
 		},
 		Users: map[string]*lib.User{},
+		Authenticator: nil,
 	}
 
 	rawRules := v.Get("rules")
@@ -202,6 +213,15 @@ func readConfig(flags *pflag.FlagSet) *lib.Config {
 	if len(cfg.Users) != 0 && !cfg.Auth {
 		log.Print("Users will be ignored due to auth=false")
 	}
+
+	cfg.Authenticator = abbot_auth.NewDigestAuthenticator("Restricted", func (username, realm string) string {
+		user, ok := cfg.Users[username]
+		if !ok {
+			return ""
+		}
+
+		return getPassword(user.Password)
+	})
 
 	return cfg
 }

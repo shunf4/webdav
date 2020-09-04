@@ -3,6 +3,7 @@ module github.com/hacdias/webdav/v3
 go 1.12
 
 require (
+	github.com/abbot/go-http-auth v0.4.0
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/cobra v0.0.5

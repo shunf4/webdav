@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+
+	abbot_auth "github.com/abbot/go-http-auth"
 )
 
 // CorsCfg is the CORS config.
@@ -24,9 +25,10 @@ type CorsCfg struct {
 // Config is the configuration of a WebDAV instance.
 type Config struct {
 	*User
-	Auth  bool
-	Cors  CorsCfg
-	Users map[string]*User
+	Auth          bool
+	Cors          CorsCfg
+	Users         map[string]*User
+	Authenticator *abbot_auth.DigestAuth
 }
 
 var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
@@ -194,29 +196,19 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Authentication
 	if c.Auth {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		if username, authinfo := c.Authenticator.CheckAuth(r); username == "" {
+			c.Authenticator.RequireAuth(w, r)
+		} else {
+			if authinfo != nil {
+				w.Header().Set(c.Authenticator.Headers.V().AuthInfo, *authinfo)
+			}
 
-		// Gets the correct user for this request.
-		username, password, ok := r.BasicAuth()
-		if !ok {
-			http.Error(w, "Not authorized", 401)
-			return
+			user, _ := c.Users[username]
+			u = user
 		}
-
-		user, ok := c.Users[username]
-		if !ok {
-			http.Error(w, "Not authorized", 401)
-			return
-		}
-
-		if !checkPassword(user.Password, password) {
-			log.Println("Wrong Password for user", username)
-			http.Error(w, "Not authorized", 401)
-			return
-		}
-
-		u = user
 	} else {
+		// TODO: update this to adapter to DigestAuth
+
 		// Even if Auth is disabled, we might want to get
 		// the user from the Basic Auth header. Useful for Caddy
 		// plugin implementation.
@@ -253,6 +245,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//		"index.html" resource, a human-readable view of the contents of
 	//		the collection, or something else altogether.
 	//
+
 	// Get, when applied to collection, will return the HTML human-readable
 	// view of dir structure.
 	if r.Method == "GET" && strings.HasPrefix(r.URL.Path, u.Handler.Prefix) {
