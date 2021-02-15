@@ -2,7 +2,7 @@
 
 Adds HTML directory listing when the user access the URL corresponding to a directory. This makes webdav's frontend interface.
 
-[![Build](https://img.shields.io/circleci/project/github/hacdias/webdav/master.svg?style=flat-square)](https://circleci.com/gh/hacdias/webdav)
+![Build](https://github.com/hacdias/webdav/workflows/Tests/badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hacdias/webdav?style=flat-square)](https://goreportcard.com/report/hacdias/webdav)
 [![Version](https://img.shields.io/github/release/hacdias/webdav.svg?style=flat-square)](https://github.com/hacdias/webdav/releases/latest)
 [![Docker Pulls](https://img.shields.io/docker/pulls/hacdias/webdav)](https://hub.docker.com/r/hacdias/webdav)
@@ -59,6 +59,8 @@ users:
       - regex: false
         allow: false
         path: /some/file
+      - path: /public/access/
+        modify: true
 ```
 
 There are more ways to customize how you run WebDAV through flags and environment variables. Please run `webdav --help` for more information on that.

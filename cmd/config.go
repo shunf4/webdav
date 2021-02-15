@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/webdav"
 )
 
-func parseRules(raw []interface{}) []*lib.Rule {
+func parseRules(raw []interface{}, defaultModify bool) []*lib.Rule {
 	rules := []*lib.Rule{}
 
 	for _, v := range raw {
@@ -22,6 +22,7 @@ func parseRules(raw []interface{}) []*lib.Rule {
 			rule := &lib.Rule{
 				Regex: false,
 				Allow: false,
+				Modify: defaultModify,
 				Path:  "",
 			}
 
@@ -31,6 +32,13 @@ func parseRules(raw []interface{}) []*lib.Rule {
 
 			if allow, ok := r["allow"].(bool); ok {
 				rule.Allow = allow
+			}
+
+			if modify, ok := r["modify"].(bool); ok {
+				rule.Modify = modify
+				if modify {
+					rule.Allow = true
+				}
 			}
 
 			path, ok := r["path"].(string)
@@ -110,12 +118,15 @@ func parseUsers(raw []interface{}, c *lib.Config) {
 			}
 
 			if rules, ok := u["rules"].([]interface{}); ok {
-				user.Rules = parseRules(rules)
+				user.Rules = append(c.User.Rules, parseRules(rules, user.Modify)...)
 			}
 
 			user.Handler = &webdav.Handler{
-				Prefix:     c.User.Handler.Prefix,
-				FileSystem: webdav.Dir(user.Scope),
+				Prefix: c.User.Handler.Prefix,
+				FileSystem: lib.WebDavDir{
+					Dir:     webdav.Dir(user.Scope),
+					NoSniff: c.NoSniff,
+				},
 				LockSystem: webdav.NewMemLS(),
 			}
 
@@ -171,12 +182,16 @@ func readConfig(flags *pflag.FlagSet) *lib.Config {
 			Modify: getOptB(flags, "modify"),
 			Rules:  []*lib.Rule{},
 			Handler: &webdav.Handler{
-				Prefix:     getOpt(flags, "prefix"),
-				FileSystem: webdav.Dir(getOpt(flags, "scope")),
+				Prefix: getOpt(flags, "prefix"),
+				FileSystem: lib.WebDavDir{
+					Dir:     webdav.Dir(getOpt(flags, "scope")),
+					NoSniff: getOptB(flags, "nosniff"),
+				},
 				LockSystem: webdav.NewMemLS(),
 			},
 		},
-		Auth: getOptB(flags, "auth"),
+		Auth:    getOptB(flags, "auth"),
+		NoSniff: getOptB(flags, "nosniff"),
 		Cors: lib.CorsCfg{
 			Enabled:     false,
 			Credentials: false,
@@ -186,7 +201,7 @@ func readConfig(flags *pflag.FlagSet) *lib.Config {
 
 	rawRules := v.Get("rules")
 	if rules, ok := rawRules.([]interface{}); ok {
-		cfg.User.Rules = parseRules(rules)
+		cfg.User.Rules = parseRules(rules, cfg.User.Modify)
 	}
 
 	rawUsers := v.Get("users")
