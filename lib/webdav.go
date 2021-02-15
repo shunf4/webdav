@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -65,6 +67,10 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
         .d-logged-in-user {
             float: right;
         }
+
+		.p-sort-links > a {
+			font-size: xx-small;
+		}
     </style>
 </head>
 
@@ -80,6 +86,40 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
 
     <p class="p-explain-dir">
         The resource you are GETting is a directory. Index of this directory is listed below.
+    </p>
+
+	<p class="p-sort-links">
+		<a href="?sort=name&desc=0&sepdir=0">NA▲☯</a> 
+        <a href="?sort=name&desc=0&sepdir=1">NA▲🗀🗎</a> 
+        <a href="?sort=name&desc=1&sepdir=0">NA▼☯</a> 
+        <a href="?sort=name&desc=1&sepdir=1">NA▼🗀🗎</a> 
+		&nbsp;|&nbsp;
+
+        <a href="?sort=orig&desc=0&sepdir=0">OR</a> 
+		&nbsp;|&nbsp;
+
+		<a href="?sort=size&desc=0&sepdir=0">SZ▲☯</a> 
+        <a href="?sort=size&desc=0&sepdir=1">SZ▲🗀🗎</a> 
+        <a href="?sort=size&desc=1&sepdir=0">SZ▼☯</a> 
+        <a href="?sort=size&desc=1&sepdir=1">SZ▼🗀🗎</a> 
+		&nbsp;|&nbsp;
+
+		<a href="?sort=mtime&desc=0&sepdir=0">MT▲☯</a> 
+        <a href="?sort=mtime&desc=0&sepdir=1">MT▲🗀🗎</a> 
+        <a href="?sort=mtime&desc=1&sepdir=0">MT▼☯</a> 
+        <a href="?sort=mtime&desc=1&sepdir=1">MT▼🗀🗎</a> 
+		&nbsp;|&nbsp;
+
+		<a href="?sort=atime&desc=0&sepdir=0">AT▲☯</a> 
+        <a href="?sort=atime&desc=0&sepdir=1">AT▲🗀🗎</a> 
+        <a href="?sort=atime&desc=1&sepdir=0">AT▼☯</a> 
+        <a href="?sort=atime&desc=1&sepdir=1">AT▼🗀🗎</a> 
+		&nbsp;|&nbsp;
+
+		<a href="?sort=ctime&desc=0&sepdir=0">CT▲☯</a> 
+        <a href="?sort=ctime&desc=0&sepdir=1">CT▲🗀🗎</a> 
+        <a href="?sort=ctime&desc=1&sepdir=0">CT▼☯</a> 
+        <a href="?sort=ctime&desc=1&sepdir=1">CT▼🗀🗎</a> 
     </p>
 
     <table class="ta-listing">
@@ -264,6 +304,50 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fileInfos, err := f.Readdir(0)
+
+			sortType := r.URL.Query().Get("sort")
+			queryDesc := strings.ToLower(r.URL.Query().Get("desc"))
+			isDesc := queryDesc == "1" || queryDesc == "true"
+			querySepDir := strings.ToLower(r.URL.Query().Get("sepdir"))
+			shouldSepDir := querySepDir == "1" || querySepDir == "true"
+
+			if sortType != "orig" {
+				sort.Slice(fileInfos, func(i, j int) bool {
+					fileI := fileInfos[i]
+					fileJ := fileInfos[j]
+					if shouldSepDir {
+						if fileI.IsDir() && !fileJ.IsDir() {
+							return true
+						}
+						if !fileI.IsDir() && fileJ.IsDir() {
+							return false
+						}
+					}
+					var less bool
+					if sortType == "size" {
+						less = fileI.Size() < fileJ.Size()
+					} else if sortType == "mtime" {
+						less = fileI.ModTime().Before(fileJ.ModTime())
+					} else if sortType == "atime" {
+						valueI := reflect.ValueOf(fileI.Sys()).Elem().FieldByName("Atim").Field(0).Int()
+						valueJ := reflect.ValueOf(fileJ.Sys()).Elem().FieldByName("Atim").Field(0).Int()
+						less = valueI < valueJ
+					} else if sortType == "ctime" {
+						valueI := reflect.ValueOf(fileI.Sys()).Elem().FieldByName("Ctim").Field(0).Int()
+						valueJ := reflect.ValueOf(fileJ.Sys()).Elem().FieldByName("Ctim").Field(0).Int()
+						less = valueI < valueJ
+					} else {
+						// name
+						less = fileI.Name() < fileJ.Name()
+					}
+
+					if isDesc {
+						less = !less
+					}
+					return less
+				})
+			}
+
 			f.Close()
 
 			detailedFileInfos := make([]os.FileInfo, len(fileInfos))
