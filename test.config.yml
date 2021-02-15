@@ -1,0 +1,14 @@
+address: 0.0.0.0
+port: 12345
+auth: true
+prefix: /
+
+# Default user settings (will be merged)
+scope: .
+modify: true
+rules: []
+
+users:
+  - username: anonymous
+    password: 
+    scope: /home/riv/work/webdav
