@@ -48,6 +48,23 @@ func (fi BadFileInfo) ModTime() time.Time { return fi.OrigModTime }
 func (fi BadFileInfo) IsDir() bool        { return fi.OrigIsDir }
 func (fi BadFileInfo) Sys() interface{}   { return struct{}{} }
 
+type FileInfoWithExistence interface {
+	os.FileInfo
+	Exists() bool
+}
+
+type BadFileInfoWithExistence struct {
+	BadFileInfo
+}
+
+func (fie BadFileInfoWithExistence) Exists() bool { return false }
+
+type OsFileInfoWithExistence struct {
+	os.FileInfo
+}
+
+func (fie OsFileInfoWithExistence) Exists() bool { return true }
+
 var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
 	"ByteCountIEC": func(b int64) string {
 		const unit = 1024
@@ -173,7 +190,9 @@ var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
             {{ range .FileInfos }}
             <tr class="tr-listing">
                 <td class="td-name-listing">
+					{{ if not .Exists}}<strike>{{ end }}
                     <a class="a-name-listing" href="./{{ .Name }}">{{ .Name }}{{ if .IsDir }}/{{ end }}</a>
+					{{ if not .Exists}}</strike>{{ end }}
                 </td>
                 <td class="td-size-listing">
                     {{ ByteCountIEC .Size }}
@@ -370,19 +389,22 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			f.Close()
 
-			detailedFileInfos := make([]os.FileInfo, len(fileInfos))
+			detailedFileInfos := make([]FileInfoWithExistence, len(fileInfos))
 
 			for i, fileInfo := range fileInfos {
-				detailedFileInfos[i], err = u.Handler.FileSystem.Stat(context.TODO(), path.Join(realPath, fileInfo.Name()))
-
-				if err != nil {
-					detailedFileInfos[i] = BadFileInfo{
+				detailedFileInfo, err := u.Handler.FileSystem.Stat(context.TODO(), path.Join(realPath, fileInfo.Name()))
+				if err == nil {
+					detailedFileInfos[i] = OsFileInfoWithExistence{
+						detailedFileInfo,
+					}
+				} else {
+					detailedFileInfos[i] = BadFileInfoWithExistence{BadFileInfo{
 						OrigName:    fileInfo.Name(),
 						OrigModTime: fileInfo.ModTime(),
 						OrigIsDir:   fileInfo.IsDir(),
 						OrigMode:    fileInfo.Mode(),
 						OrigSize:    fileInfo.Size(),
-					}
+					}}
 				}
 			}
 
@@ -391,7 +413,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Username  string
 				URLPrefix string
 				URLPath   string
-				FileInfos []os.FileInfo
+				FileInfos []FileInfoWithExistence
 			}{
 				Username:  u.Username,
 				URLPrefix: u.Handler.Prefix,
