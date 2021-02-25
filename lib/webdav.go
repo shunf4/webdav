@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
 
 // CorsCfg is the CORS config.
@@ -31,6 +32,21 @@ type Config struct {
 	Cors    CorsCfg
 	Users   map[string]*User
 }
+
+type BadFileInfo struct {
+	OrigName    string
+	OrigSize    int64
+	OrigMode    os.FileMode
+	OrigModTime time.Time
+	OrigIsDir   bool
+}
+
+func (fi BadFileInfo) Name() string       { return fi.OrigName }
+func (fi BadFileInfo) Size() int64        { return fi.OrigSize }
+func (fi BadFileInfo) Mode() os.FileMode  { return fi.OrigMode }
+func (fi BadFileInfo) ModTime() time.Time { return fi.OrigModTime }
+func (fi BadFileInfo) IsDir() bool        { return fi.OrigIsDir }
+func (fi BadFileInfo) Sys() interface{}   { return struct{}{} }
 
 var tmpl = template.Must(template.New("dirList.html").Funcs(template.FuncMap{
 	"ByteCountIEC": func(b int64) string {
@@ -304,6 +320,10 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fileInfos, err := f.Readdir(0)
+			if err != nil {
+				http.Error(w, "Error reading directory", 500)
+				return
+			}
 
 			sortType := r.URL.Query().Get("sort")
 			queryDesc := strings.ToLower(r.URL.Query().Get("desc"))
@@ -356,15 +376,16 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				detailedFileInfos[i], err = u.Handler.FileSystem.Stat(context.TODO(), path.Join(realPath, fileInfo.Name()))
 
 				if err != nil {
-					http.Error(w, "Error stating file", 500)
-					return
+					detailedFileInfos[i] = BadFileInfo{
+						OrigName:    fileInfo.Name(),
+						OrigModTime: fileInfo.ModTime(),
+						OrigIsDir:   fileInfo.IsDir(),
+						OrigMode:    fileInfo.Mode(),
+						OrigSize:    fileInfo.Size(),
+					}
 				}
 			}
 
-			if err != nil {
-				http.Error(w, "Error reading directory", 500)
-				return
-			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			err = tmpl.Execute(w, struct {
 				Username  string
