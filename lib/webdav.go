@@ -314,6 +314,7 @@ func (c *Config) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "HEAD" {
 		w = newResponseWriterNoBody(w)
+		return
 	}
 
 	// Excerpt from RFC4918, section 9.4:
